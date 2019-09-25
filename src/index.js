@@ -61,15 +61,7 @@ const rescaleImage = image => {
 };
 
 const buildModel = () => {
-  const {
-    conv2d,
-    maxPooling2d,
-    flatten,
-    dense,
-    batchNormalization,
-    dropout,
-    activation
-  } = tf.layers;
+  const { conv2d, maxPooling2d, flatten, dense, dropout } = tf.layers;
 
   const model = tf.sequential();
 
@@ -96,31 +88,8 @@ const buildModel = () => {
   model.add(dropout({ rate: 0.2 }));
   model.add(dense({ units: 1, activation: "sigmoid" }));
 
-  // model.add(
-  //   conv2d({
-  //     inputShape: [TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 3],
-  //     kernelSize: 3,
-  //     filters: 16,
-  //     activation: "relu"
-  //   })
-  // );
-  // model.add(maxPooling2d({ poolSize: 2, strides: 2 }));
-  // model.add(conv2d({ kernelSize: 3, filters: 32 }));
-  // model.add(batchNormalization());
-  // model.add(activation({ activation: "relu" }));
-  // model.add(maxPooling2d({ poolSize: 2, strides: 2 }));
-  // // model.add(conv2d({ kernelSize: 3, filters: 32, activation: "relu" }));
-  // model.add(conv2d({ kernelSize: 3, filters: 32 }));
-  // model.add(batchNormalization());
-  // model.add(activation({ activation: "relu" }));
-
-  // model.add(flatten());
-  // model.add(dense({ units: 64, activation: "relu" }));
-  // model.add(dropout({ relu: 0.2 }));
-  // model.add(dense({ units: 2, activation: "softmax" }));
   model.compile({
     optimizer: tf.train.adam(0.0001),
-    // optimizer: "adam",
     loss: "binaryCrossentropy",
     metrics: ["accuracy"]
   });
@@ -225,7 +194,6 @@ const run = async () => {
       validationSplit: 0.1,
       shuffle: true,
       epochs: 100,
-      // epochs: 10,
       callbacks: tfvis.show.fitCallbacks(
         lossContainer,
         ["loss", "val_loss", "acc", "val_acc"],
