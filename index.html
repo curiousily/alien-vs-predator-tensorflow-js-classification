@@ -1,16 +1,41 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <title>Parcel Sandbox</title>
+    <meta charset="UTF-8" />
+  </head>
 
-<head>
-	<title>Parcel Sandbox</title>
-	<meta charset="UTF-8" />
-</head>
-
-<body>
-	<div id="app"></div>
-
-	<script src="src/index.js">
-	</script>
-</body>
-
+  <body>
+    <div id="wrapper">
+      <div>
+        <img
+          src="https://raw.githubusercontent.com/curiousily/tfjs-data/master/avp/train/alien/0.jpg"
+        />
+      </div>
+      <div>
+        <img
+          src="https://raw.githubusercontent.com/curiousily/tfjs-data/master/avp/train/predator/0.jpg"
+        />
+      </div>
+      <div>
+        <canvas id="tensor-image-preview" />
+      </div>
+      <div id="loss-cont"></div>
+      <div id="confusion-matrix"></div>
+      <div>
+        <img
+          src="https://raw.githubusercontent.com/curiousily/tfjs-data/master/avp/validation/alien/1.jpg"
+        />
+        <p id="alien-prediction">Alien prediction: loading</p>
+      </div>
+      <div>
+        <img
+          src="https://raw.githubusercontent.com/curiousily/tfjs-data/master/avp/validation/predator/1.jpg"
+        />
+        <p id="predator-prediction">Predator prediction: loading</p>
+      </div>
+    </div>
+    <script src="src/styles.css"></script>
+    <script src="src/index.js"></script>
+  </body>
 </html>
