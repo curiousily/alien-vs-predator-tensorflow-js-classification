@@ -178,7 +178,7 @@ const renderImageTable = (container, headerData, data) => {
   rows.exit().remove();
 };
 
-const getActivationTable = (model, xTrain, layerName) => {
+const getActivationTable = (model, examples, layerName) => {
   const layer = model.getLayer(layerName);
 
   let filters = tf.tidy(() =>
@@ -192,7 +192,7 @@ const getActivationTable = (model, xTrain, layerName) => {
   filters.unshift("Input");
 
   const activations = tf.tidy(() => {
-    return getActivation(xTrain, model, layer).unstack();
+    return getActivation(examples, model, layer).unstack();
   });
   const activationImageSize = activations[0].shape[0]; // e.g. 24
 
@@ -209,7 +209,9 @@ const getActivationTable = (model, xTrain, layerName) => {
       );
 
     const inputExample = tf.tidy(() =>
-      xTrain.slice([i], [1]).reshape([TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 1])
+      examples
+        .slice([i], [1])
+        .reshape([TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 1])
     );
     unpackedActivations.unshift(inputExample);
     return unpackedActivations;
@@ -332,21 +334,27 @@ const run = async () => {
 
     predatorText.innerHTML = `Predator prediction: ${1.0 - predResults[1]}`;
 
-    // tfvis.show.layer(
-    //   document.getElementById("conv-layer-container"),
-    //   model.getLayer("first-conv-layer")
-    // );
+    tfvis.show.layer(
+      document.getElementById("conv-layer-container"),
+      model.getLayer("first-conv-layer")
+    );
 
-    // const { filters, filterActivations } = getActivationTable(
-    //   model,
-    //   xTrain,
-    //   "first-conv-layer"
-    // );
-    // renderImageTable(
-    //   document.getElementById("conv-layer-filters"),
-    //   filters,
-    //   filterActivations
-    // );
+    const activationExamples = tf.concat([
+      trainAlienTensors.slice(0, 5),
+      trainPredatorTensors.slice(0, 5)
+    ]);
+
+    const { filters, filterActivations } = getActivationTable(
+      model,
+      activationExamples,
+      "first-conv-layer"
+    );
+
+    renderImageTable(
+      document.getElementById("conv-layer-filters"),
+      filters,
+      filterActivations
+    );
   } catch (e) {
     console.log(e.message);
   }
