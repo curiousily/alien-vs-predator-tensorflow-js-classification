@@ -1,8 +1,8 @@
 import * as tf from "@tensorflow/tfjs";
-import * as Plotly from "plotly.js-dist";
 import * as tfvis from "@tensorflow/tfjs-vis";
-import * as d3 from "d3";
 import _ from "lodash";
+
+import { renderFilters, renderLayer } from "./visualization";
 
 var pixels = require("image-pixels");
 
@@ -106,137 +106,6 @@ const showImageFromTensor = async tensor => {
   await tf.browser.toPixels(rescale(tf.squeeze(tensor), 0.0, 1.0), canvasEl);
 };
 
-const getActivation = (input, model, layer) => {
-  const activationModel = tf.model({
-    inputs: model.input,
-    outputs: layer.output
-  });
-  return activationModel.predict(input);
-};
-
-const renderImage = async (container, tensor, imageOpts) => {
-  const resized = tf.tidy(() =>
-    tf.image
-      .resizeNearestNeighbor(tensor, [imageOpts.height, imageOpts.width])
-      .clipByValue(0.0, 1.0)
-  );
-  const canvas = document.createElement("canvas");
-  canvas.width = imageOpts.width;
-  canvas.height = imageOpts.height;
-  canvas.style = `margin: 4px; width:${imageOpts.width}px; height:${
-    imageOpts.height
-  }px`;
-  container.appendChild(canvas);
-  await tf.browser.toPixels(resized, canvas);
-  resized.dispose();
-};
-
-const renderImageTable = (container, headerData, data) => {
-  let table = d3.select(container).select("table");
-
-  if (table.size() === 0) {
-    table = d3.select(container).append("table");
-    table.append("thead").append("tr");
-    table.append("tbody");
-  }
-
-  const headers = table
-    .select("thead")
-    .select("tr")
-    .selectAll("th")
-    .data(headerData);
-  const headersEnter = headers.enter().append("th");
-  headers.merge(headersEnter).each((d, i, group) => {
-    const node = group[i];
-
-    if (typeof d === "string") {
-      node.innerHTML = d;
-    } else {
-      renderImage(node, d, {
-        width: 25,
-        height: 25
-      });
-    }
-  });
-  const rows = table
-    .select("tbody")
-    .selectAll("tr")
-    .data(data);
-  const rowsEnter = rows.enter().append("tr");
-  const cells = rows
-    .merge(rowsEnter)
-    .selectAll("td")
-    .data(d => d);
-  const cellsEnter = cells.enter().append("td");
-  cells.merge(cellsEnter).each((d, i, group) => {
-    const node = group[i];
-    renderImage(node, d, {
-      width: 40,
-      height: 40
-    });
-  });
-  cells.exit().remove();
-  rows.exit().remove();
-};
-
-const getActivationTable = (model, examples, layerName) => {
-  const layer = model.getLayer(layerName);
-
-  let filters = tf.tidy(() =>
-    layer.kernel.val.transpose([3, 0, 1, 2]).unstack()
-  );
-
-  if (filters[0].shape[2] > 3) {
-    filters = filters.map((d, i) => `Filter ${i + 1}`);
-  }
-
-  filters.unshift("Input");
-
-  const activations = tf.tidy(() => {
-    return getActivation(examples, model, layer).unstack();
-  });
-  const activationImageSize = activations[0].shape[0]; // e.g. 24
-
-  const numFilters = activations[0].shape[2]; // e.g. 8
-
-  const filterActivations = activations.map((activation, i) => {
-    const unpackedActivations = Array(numFilters)
-      .fill(0)
-      .map((_, i) =>
-        activation.slice(
-          [0, 0, i],
-          [activationImageSize, activationImageSize, 1]
-        )
-      );
-
-    const inputExample = tf.tidy(() =>
-      examples
-        .slice([i], [1])
-        .reshape([TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 1])
-    );
-    unpackedActivations.unshift(inputExample);
-    return unpackedActivations;
-  });
-  return {
-    filters,
-    filterActivations
-  };
-};
-
-const renderFilters = (model, examples, layerName, container) => {
-  const { filters, filterActivations } = getActivationTable(
-    model,
-    examples,
-    layerName
-  );
-
-  renderImageTable(
-    document.getElementById(container),
-    filters,
-    filterActivations
-  );
-};
-
 const run = async () => {
   const trainAlienImagePaths = _.range(0, TRAIN_IMAGES_PER_CLASS).map(
     num => `${TRAIN_DIR_URL}alien/${num}.jpg`
@@ -305,28 +174,27 @@ const run = async () => {
 
     const yTest = tf.concat([testAlienLabels, testPredatorLabels]);
 
-    const model = buildModel();
+    // const model = buildModel();
 
-    const lossContainer = document.getElementById("loss-cont");
+    // const lossContainer = document.getElementById("loss-cont");
 
-    await model.fit(xTrain, yTrain, {
-      batchSize: 32,
-      validationSplit: 0.1,
-      shuffle: true,
-      epochs: 100,
-      // epochs: 2,
-      callbacks: tfvis.show.fitCallbacks(
-        lossContainer,
-        ["loss", "val_loss", "acc", "val_acc"],
-        {
-          callbacks: ["onEpochEnd"]
-        }
-      )
-    });
+    // await model.fit(xTrain, yTrain, {
+    //   batchSize: 32,
+    //   validationSplit: 0.1,
+    //   shuffle: true,
+    //   epochs: 100,
+    //   callbacks: tfvis.show.fitCallbacks(
+    //     lossContainer,
+    //     ["loss", "val_loss", "acc", "val_acc"],
+    //     {
+    //       callbacks: ["onEpochEnd"]
+    //     }
+    //   )
+    // });
 
-    await model.save("localstorage://cnn-model");
+    // await model.save("localstorage://cnn-model");
 
-    // const model = await tf.loadLayersModel("localstorage://cnn-model");
+    const model = await tf.loadLayersModel("localstorage://cnn-model");
 
     const preds = tf.squeeze(tf.round(model.predict(xTest)));
     const labels = yTest;
@@ -349,33 +217,29 @@ const run = async () => {
 
     predatorText.innerHTML = `Predator prediction: ${1.0 - predResults[1]}`;
 
-    tfvis.show.layer(
-      document.getElementById("first-layer-container"),
-      model.getLayer("first-conv-layer")
-    );
-
     const activationExamples = tf.concat([
       trainAlienTensors.slice(0, 5),
       trainPredatorTensors.slice(0, 5)
     ]);
 
+    renderLayer(model, "first-conv-layer", "first-layer-container");
+
     renderFilters(
       model,
       activationExamples,
       "first-conv-layer",
-      "first-layer-filters"
+      "first-layer-filters",
+      TENSOR_IMAGE_SIZE
     );
 
-    tfvis.show.layer(
-      document.getElementById("second-layer-container"),
-      model.getLayer("second-conv-layer")
-    );
+    renderLayer(model, "second-conv-layer", "second-layer-container");
 
     renderFilters(
       model,
       activationExamples,
       "second-conv-layer",
-      "second-layer-filters"
+      "second-layer-filters",
+      TENSOR_IMAGE_SIZE
     );
   } catch (e) {
     console.log(e.message);
