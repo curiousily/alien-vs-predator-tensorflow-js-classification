@@ -1,6 +1,7 @@
 import * as tf from "@tensorflow/tfjs";
 import * as Plotly from "plotly.js-dist";
 import * as tfvis from "@tensorflow/tfjs-vis";
+import * as d3 from "d3";
 import _ from "lodash";
 
 var pixels = require("image-pixels");
@@ -8,9 +9,9 @@ var pixels = require("image-pixels");
 const TENSOR_IMAGE_SIZE = 28;
 
 const TRAIN_IMAGES_PER_CLASS = 347;
-// const TRAIN_IMAGES_PER_CLASS = 50;
+// const TRAIN_IMAGES_PER_CLASS = 10;
 const VALID_IMAGES_PER_CLASS = 100;
-// const VALID_IMAGES_PER_CLASS = 10;
+// const VALID_IMAGES_PER_CLASS = 5;
 
 const CLASSES = ["alien", "predator"];
 
@@ -23,29 +24,11 @@ const VALID_DIR_URL =
 const loadImages = async urls => {
   const imageData = await pixels.all(urls, { clip: [0, 0, 192, 192] });
   return imageData.map(d =>
-    rescaleImage(resizeImage(toSquare(tf.browser.fromPixels(d))))
+    rescaleImage(resizeImage(toGreyScale(tf.browser.fromPixels(d))))
   );
 };
 
-const toSquare = img => {
-  const width = img.shape[0];
-  const height = img.shape[1];
-
-  // use the shorter side as the size to which we will crop
-  const shorterSide = Math.min(img.shape[0], img.shape[1]);
-
-  // calculate beginning and ending crop points
-  const startingHeight = (height - shorterSide) / 2;
-  const startingWidth = (width - shorterSide) / 2;
-  const endingHeight = startingHeight + shorterSide;
-  const endingWidth = startingWidth + shorterSide;
-
-  // return image data cropped to those points
-  return img.slice(
-    [startingWidth, startingHeight, 0],
-    [endingWidth, endingHeight, 3]
-  );
-};
+const toGreyScale = image => image.mean(2).expandDims(2);
 
 const resizeImage = image =>
   tf.image.resizeBilinear(image, [TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE]);
@@ -57,36 +40,46 @@ const rescaleImage = image => {
     .toFloat()
     .div(tf.scalar(127))
     .sub(tf.scalar(1));
-  // .sub(tf.scalar(1));
 };
 
 const buildModel = () => {
-  const { conv2d, maxPooling2d, flatten, dense, dropout } = tf.layers;
+  const { conv2d, maxPooling2d, flatten, dense } = tf.layers;
 
   const model = tf.sequential();
 
   model.add(
     conv2d({
-      inputShape: [TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 3],
-      kernelSize: 3,
-      filters: 32,
-      activation: "relu"
+      name: "first-conv-layer",
+      inputShape: [TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 1],
+      kernelSize: 5,
+      filters: 8,
+      strides: 1,
+      activation: "relu",
+      kernelInitializer: "varianceScaling"
     })
   );
   model.add(maxPooling2d({ poolSize: 2, strides: 2 }));
 
-  model.add(conv2d({ kernelSize: 3, filters: 32, activation: "relu" }));
-  model.add(maxPooling2d({ poolSize: 2, strides: 2 }));
-
-  model.add(conv2d({ kernelSize: 3, filters: 32, activation: "relu" }));
+  model.add(
+    conv2d({
+      kernelSize: 5,
+      filters: 16,
+      strides: 1,
+      activation: "relu",
+      kernelInitializer: "varianceScaling"
+    })
+  );
   model.add(maxPooling2d({ poolSize: 2, strides: 2 }));
 
   model.add(flatten());
-  model.add(dense({ units: 128, activation: "relu" }));
-  model.add(dropout({ rate: 0.2 }));
-  model.add(dense({ units: 64, activation: "relu" }));
-  model.add(dropout({ rate: 0.2 }));
-  model.add(dense({ units: 1, activation: "sigmoid" }));
+
+  model.add(
+    dense({
+      units: 1,
+      kernelInitializer: "varianceScaling",
+      activation: "sigmoid"
+    })
+  );
 
   model.compile({
     optimizer: tf.train.adam(0.0001),
@@ -105,19 +98,129 @@ const rescale = (tensor, lowerBound, upperBound) => {
 };
 
 const showImageFromTensor = async tensor => {
-  const canvasPreview = document.getElementById("tensor-image-preview");
-  canvasPreview.width = TENSOR_IMAGE_SIZE;
-  canvasPreview.height = TENSOR_IMAGE_SIZE;
+  const canvasEl = document.getElementById("tensor-image-preview");
+  canvasEl.width = TENSOR_IMAGE_SIZE;
+  canvasEl.height = TENSOR_IMAGE_SIZE;
 
-  await tf.browser.toPixels(
-    rescale(tf.squeeze(tensor), 0.0, 1.0),
-    canvasPreview
+  await tf.browser.toPixels(rescale(tf.squeeze(tensor), 0.0, 1.0), canvasEl);
+};
+
+const getActivation = (input, model, layer) => {
+  const activationModel = tf.model({
+    inputs: model.input,
+    outputs: layer.output
+  });
+  return activationModel.predict(input);
+};
+
+const renderImage = async (container, tensor, imageOpts) => {
+  const resized = tf.tidy(() =>
+    tf.image
+      .resizeNearestNeighbor(tensor, [imageOpts.height, imageOpts.width])
+      .clipByValue(0.0, 1.0)
   );
+  const canvas = document.createElement("canvas");
+  canvas.width = imageOpts.width;
+  canvas.height = imageOpts.height;
+  canvas.style = `margin: 4px; width:${imageOpts.width}px; height:${
+    imageOpts.height
+  }px`;
+  container.appendChild(canvas);
+  await tf.browser.toPixels(resized, canvas);
+  resized.dispose();
+};
+
+const renderImageTable = (container, headerData, data) => {
+  let table = d3.select(container).select("table");
+
+  if (table.size() === 0) {
+    table = d3.select(container).append("table");
+    table.append("thead").append("tr");
+    table.append("tbody");
+  }
+
+  const headers = table
+    .select("thead")
+    .select("tr")
+    .selectAll("th")
+    .data(headerData);
+  const headersEnter = headers.enter().append("th");
+  headers.merge(headersEnter).each((d, i, group) => {
+    const node = group[i];
+
+    if (typeof d === "string") {
+      node.innerHTML = d;
+    } else {
+      renderImage(node, d, {
+        width: 25,
+        height: 25
+      });
+    }
+  });
+  const rows = table
+    .select("tbody")
+    .selectAll("tr")
+    .data(data);
+  const rowsEnter = rows.enter().append("tr");
+  const cells = rows
+    .merge(rowsEnter)
+    .selectAll("td")
+    .data(d => d);
+  const cellsEnter = cells.enter().append("td");
+  cells.merge(cellsEnter).each((d, i, group) => {
+    const node = group[i];
+    renderImage(node, d, {
+      width: 40,
+      height: 40
+    });
+  });
+  cells.exit().remove();
+  rows.exit().remove();
+};
+
+const getActivationTable = (model, xTrain, layerName) => {
+  const layer = model.getLayer(layerName);
+
+  let filters = tf.tidy(() =>
+    layer.kernel.val.transpose([3, 0, 1, 2]).unstack()
+  );
+
+  if (filters[0].shape[2] > 3) {
+    filters = filters.map((d, i) => `Filter ${i + 1}`);
+  }
+
+  filters.unshift("Input");
+
+  const activations = tf.tidy(() => {
+    return getActivation(xTrain, model, layer).unstack();
+  });
+  const activationImageSize = activations[0].shape[0]; // e.g. 24
+
+  const numFilters = activations[0].shape[2]; // e.g. 8
+
+  const filterActivations = activations.map((activation, i) => {
+    const unpackedActivations = Array(numFilters)
+      .fill(0)
+      .map((_, i) =>
+        activation.slice(
+          [0, 0, i],
+          [activationImageSize, activationImageSize, 1]
+        )
+      );
+
+    const inputExample = tf.tidy(() =>
+      xTrain.slice([i], [1]).reshape([TENSOR_IMAGE_SIZE, TENSOR_IMAGE_SIZE, 1])
+    );
+    unpackedActivations.unshift(inputExample);
+    return unpackedActivations;
+  });
+  return {
+    filters,
+    filterActivations
+  };
 };
 
 const run = async () => {
-  console.log("Hello");
-
   const trainAlienImagePaths = _.range(0, TRAIN_IMAGES_PER_CLASS).map(
     num => `${TRAIN_DIR_URL}alien/${num}.jpg`
   );
@@ -134,20 +237,20 @@ const run = async () => {
     num => `${VALID_DIR_URL}predator/${num}.jpg`
   );
 
-  const trainAlienImages = await loadImages(trainAlienImagePaths);
-  const trainPredatorImages = await loadImages(trainPredatorImagePaths);
-
-  const testAlienImages = await loadImages(validAlienImagePaths);
-  const testPredatorImages = await loadImages(validPredatorImagePaths);
-
   try {
+    const trainAlienImages = await loadImages(trainAlienImagePaths);
+    const trainPredatorImages = await loadImages(trainPredatorImagePaths);
+
+    const testAlienImages = await loadImages(validAlienImagePaths);
+    const testPredatorImages = await loadImages(validPredatorImagePaths);
+
     const res = tf.layers
       .conv2d({ kernelSize: 3, filters: 3 })
       .apply(trainPredatorImages[0]);
 
     // await showImageFromTensor(res);
 
-    // await showImageFromTensor(trainAlienImages[0]);
+    // await showImageFromTensor(trainPredatorImages[0]);
 
     const trainAlienTensors = tf.concat(trainAlienImages);
 
@@ -193,7 +296,8 @@ const run = async () => {
       batchSize: 32,
       validationSplit: 0.1,
       shuffle: true,
-      epochs: 100,
+      epochs: 150,
+      // epochs: 2,
       callbacks: tfvis.show.fitCallbacks(
         lossContainer,
         ["loss", "val_loss", "acc", "val_acc"],
@@ -223,11 +327,25 @@ const run = async () => {
     const predatorText = document.getElementById("predator-prediction");
 
     predatorText.innerHTML = `Predator prediction: ${1.0 - predResults[1]}`;
+
+    // tfvis.show.layer(
+    //   document.getElementById("conv-layer-container"),
+    //   model.getLayer("first-conv-layer")
+    // );
+
+    // const { filters, filterActivations } = getActivationTable(
+    //   model,
+    //   xTrain,
+    //   "first-conv-layer"
+    // );
+    // renderImageTable(
+    //   document.getElementById("conv-layer-filters"),
+    //   filters,
+    //   filterActivations
+    // );
   } catch (e) {
     console.log(e.message);
   }
-
-  console.log("Blaster");
 };
 
 if (document.readyState !== "loading") {
