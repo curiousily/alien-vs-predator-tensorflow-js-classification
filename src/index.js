@@ -8,10 +8,10 @@ var pixels = require("image-pixels");
 
 const TENSOR_IMAGE_SIZE = 28;
 
-// const TRAIN_IMAGES_PER_CLASS = 347;
-const TRAIN_IMAGES_PER_CLASS = 10;
-// const VALID_IMAGES_PER_CLASS = 100;
-const VALID_IMAGES_PER_CLASS = 5;
+const TRAIN_IMAGES_PER_CLASS = 347;
+// const TRAIN_IMAGES_PER_CLASS = 10;
+const VALID_IMAGES_PER_CLASS = 100;
+// const VALID_IMAGES_PER_CLASS = 5;
 
 const CLASSES = ["alien", "predator"];
 
@@ -62,6 +62,7 @@ const buildModel = () => {
 
   model.add(
     conv2d({
+      name: "second-conv-layer",
       kernelSize: 5,
       filters: 16,
       strides: 1,
@@ -222,6 +223,20 @@ const getActivationTable = (model, examples, layerName) => {
   };
 };
 
+const renderFilters = (model, examples, layerName, container) => {
+  const { filters, filterActivations } = getActivationTable(
+    model,
+    examples,
+    layerName
+  );
+
+  renderImageTable(
+    document.getElementById(container),
+    filters,
+    filterActivations
+  );
+};
+
 const run = async () => {
   const trainAlienImagePaths = _.range(0, TRAIN_IMAGES_PER_CLASS).map(
     num => `${TRAIN_DIR_URL}alien/${num}.jpg`
@@ -290,28 +305,28 @@ const run = async () => {
 
     const yTest = tf.concat([testAlienLabels, testPredatorLabels]);
 
-    // const model = buildModel();
+    const model = buildModel();
 
-    // const lossContainer = document.getElementById("loss-cont");
+    const lossContainer = document.getElementById("loss-cont");
 
-    // await model.fit(xTrain, yTrain, {
-    //   batchSize: 32,
-    //   validationSplit: 0.1,
-    //   shuffle: true,
-    //   epochs: 100,
-    //   // epochs: 2,
-    //   callbacks: tfvis.show.fitCallbacks(
-    //     lossContainer,
-    //     ["loss", "val_loss", "acc", "val_acc"],
-    //     {
-    //       callbacks: ["onEpochEnd"]
-    //     }
-    //   )
-    // });
+    await model.fit(xTrain, yTrain, {
+      batchSize: 32,
+      validationSplit: 0.1,
+      shuffle: true,
+      epochs: 100,
+      // epochs: 2,
+      callbacks: tfvis.show.fitCallbacks(
+        lossContainer,
+        ["loss", "val_loss", "acc", "val_acc"],
+        {
+          callbacks: ["onEpochEnd"]
+        }
+      )
+    });
 
-    // await model.save("localstorage://cnn-model");
+    await model.save("localstorage://cnn-model");
 
-    const model = await tf.loadLayersModel("localstorage://cnn-model");
+    // const model = await tf.loadLayersModel("localstorage://cnn-model");
 
     const preds = tf.squeeze(tf.round(model.predict(xTest)));
     const labels = yTest;
@@ -335,7 +350,7 @@ const run = async () => {
     predatorText.innerHTML = `Predator prediction: ${1.0 - predResults[1]}`;
 
     tfvis.show.layer(
-      document.getElementById("conv-layer-container"),
+      document.getElementById("first-layer-container"),
       model.getLayer("first-conv-layer")
     );
 
@@ -344,16 +359,23 @@ const run = async () => {
       trainPredatorTensors.slice(0, 5)
     ]);
 
-    const { filters, filterActivations } = getActivationTable(
+    renderFilters(
       model,
       activationExamples,
-      "first-conv-layer"
+      "first-conv-layer",
+      "first-layer-filters"
     );
 
-    renderImageTable(
-      document.getElementById("conv-layer-filters"),
-      filters,
-      filterActivations
+    tfvis.show.layer(
+      document.getElementById("second-layer-container"),
+      model.getLayer("second-conv-layer")
+    );
+
+    renderFilters(
+      model,
+      activationExamples,
+      "second-conv-layer",
+      "second-layer-filters"
     );
   } catch (e) {
     console.log(e.message);
