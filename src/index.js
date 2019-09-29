@@ -13,8 +13,6 @@ const TRAIN_IMAGES_PER_CLASS = 347;
 const VALID_IMAGES_PER_CLASS = 100;
 // const VALID_IMAGES_PER_CLASS = 5;
 
-const CLASSES = ["alien", "predator"];
-
 const TRAIN_DIR_URL =
   "https://raw.githubusercontent.com/curiousily/tfjs-data/master/avp/train/";
 
@@ -174,27 +172,27 @@ const run = async () => {
 
     const yTest = tf.concat([testAlienLabels, testPredatorLabels]);
 
-    // const model = buildModel();
+    const model = buildModel();
 
-    // const lossContainer = document.getElementById("loss-cont");
+    const lossContainer = document.getElementById("loss-cont");
 
-    // await model.fit(xTrain, yTrain, {
-    //   batchSize: 32,
-    //   validationSplit: 0.1,
-    //   shuffle: true,
-    //   epochs: 100,
-    //   callbacks: tfvis.show.fitCallbacks(
-    //     lossContainer,
-    //     ["loss", "val_loss", "acc", "val_acc"],
-    //     {
-    //       callbacks: ["onEpochEnd"]
-    //     }
-    //   )
-    // });
+    await model.fit(xTrain, yTrain, {
+      batchSize: 32,
+      validationSplit: 0.1,
+      shuffle: true,
+      epochs: 150,
+      callbacks: tfvis.show.fitCallbacks(
+        lossContainer,
+        ["loss", "val_loss", "acc", "val_acc"],
+        {
+          callbacks: ["onEpochEnd"]
+        }
+      )
+    });
 
-    // await model.save("localstorage://cnn-model");
+    await model.save("localstorage://cnn-model");
 
-    const model = await tf.loadLayersModel("localstorage://cnn-model");
+    // const model = await tf.loadLayersModel("localstorage://cnn-model");
 
     const preds = tf.squeeze(tf.round(model.predict(xTest)));
     const labels = yTest;
