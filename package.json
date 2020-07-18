@@ -12,7 +12,7 @@
     "@tensorflow/tfjs-vis": "1.1.0",
     "d3": "5.12.0",
     "image-pixels": "2.2.2",
-    "lodash": "4.17.15",
+    "lodash": "4.17.19",
     "plotly.js-dist": "1.49.5"
   },
   "devDependencies": {
